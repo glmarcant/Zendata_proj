@@ -1,11 +1,11 @@
 # document loading
 pymupdf
 
-# # Langchain
-# langchain
-# langchainhub
-# langchain_community
-# langchain-openai
+# Langchain
+langchain
+langchainhub
+langchain_community
+langchain-openai
  
 # # vectorDB
 # pymilvus 
