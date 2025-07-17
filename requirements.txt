@@ -10,10 +10,11 @@ langchain-openai
 # env 
 python-dotenv
  
-# # vectorDB
-# pymilvus 
+# vectorDB
+pymilvus 
 
-# tiktoken 
+# token counting
+tiktoken 
  
  
  
