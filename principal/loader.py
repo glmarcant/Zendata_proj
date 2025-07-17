@@ -1,6 +1,7 @@
-import os # non so se ralmente necessaia
-from langchain_community.document_loaders import 
+import os # per gestire i percorsi dei file
+from langchain_community.document_loaders import PyMuPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import shutil
 
 class DocumentLoader:
     """
@@ -8,7 +9,7 @@ class DocumentLoader:
     Usa Langchain per caricare e suddividere i documenti in chunk.
     """
 
-    def __init__(self, docs_dir: str, chunk_size: int = 1000, chunk_overlap: int = 100):
+    def __init__(self, docs_dir: str, chunk_size: int = 1000, chunk_overlap: int = 200):
         """
         Args:
             docs_dir (str): Directory contenente i PDF.
@@ -29,7 +30,7 @@ class DocumentLoader:
         for filename in os.listdir(self.docs_dir):
             if filename.lower().endswith('.pdf'):
                 file_path = os.path.join(self.docs_dir, filename)
-                loader = PDFLoader(file_path)
+                loader = PyMuPDFLoader(file_path)
                 docs = loader.load()
                 documents.extend(docs)
         return documents
@@ -48,6 +49,21 @@ class DocumentLoader:
         )
         chunks = splitter.split_documents(documents)
         return chunks
+    
+    def save_chunks_to_files(self, chunks, output_dir='chunks'):
+        # Svuota la cartella se esiste
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+
+        for i, chunk in enumerate(chunks):
+            source_path = chunk.metadata.get("source", "unknown")
+            base_name = os.path.splitext(os.path.basename(source_path))[0]
+
+            filename = f"chunk_{base_name}_{i+1:03}.txt"
+            filepath = os.path.join(output_dir, filename)
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(chunk.page_content)
 
     def load_and_chunk(self):
         """
@@ -57,8 +73,8 @@ class DocumentLoader:
         """
         docs = self.load_documents()
         chunks = self.chunk_documents(docs)
+        self.save_chunks_to_files(chunks)
         return chunks
 
-# Esempio di utilizzo:
-# loader = DocumentLoader(docs_dir="docs/")
-# chunks = loader.load_and_chunk()
+loader = DocumentLoader(docs_dir="docs/")
+chunks = loader.load_and_chunk()

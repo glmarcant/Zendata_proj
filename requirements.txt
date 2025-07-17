@@ -6,6 +6,9 @@ langchain
 langchainhub
 langchain_community
 langchain-openai
+
+# env 
+python-dotenv
  
 # # vectorDB
 # pymilvus 
