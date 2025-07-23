@@ -1,8 +1,14 @@
 import os
+from dotenv import load_dotenv
 from typing import List, Dict, Any
-from langchain.embeddings import AzureOpenAIEmbeddings  # Puoi sostituire con JinaEmbeddings se preferisci
+from langchain_openai import AzureOpenAIEmbeddings  # Si può sostituire con JinaEmbeddings successivamente
 from langchain.vectorstores import Milvus
 # from langchain.vectorstores import Quadrant  # Per estensione futura
+
+load_dotenv()
+
+api_key = os.getenv("AZURE_OPENAI_API_KEY")
+endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 
 class Embedder:
     """
@@ -18,10 +24,14 @@ class Embedder:
             kwargs: Parametri aggiuntivi per embedder e database.
         """
         if embedder_type == "azure_openai":
-            self.embedder = AzureOpenAIEmbeddings(**kwargs)
-        elif embedder_type == "jina":
-            from langchain.embeddings import JinaEmbeddings
-            self.embedder = JinaEmbeddings(**kwargs)
+            self.embedder = AzureOpenAIEmbeddings(
+                api_key=api_key,
+                azure_endpoint=endpoint,
+                **kwargs
+            )
+        # elif embedder_type == "jina":
+        #     from langchain.embeddings import JinaEmbeddings
+        #     self.embedder = JinaEmbeddings(**kwargs)
         else:
             raise ValueError("Embedder non supportato.")
 
@@ -76,35 +86,6 @@ class Embedder:
         """
         embedded_chunks = self.embed_chunks(chunks)
         self.save_embeddings(embedded_chunks, collection_name=collection_name)
-
-# Esempio di utilizzo:
-# from loader import DocumentLoader
-# loader = DocumentLoader(docs_dir="docs/")
-# chunks = loader.load_and_chunk()
-# embedder = Embedder(embedder_type="azure_openai", db_type="milvus", azure_endpoint="...", api_key="...")
-# embedder.process(chunks)
-
-
-
-
-
-
-
-
-import tiktoken
-
-def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> int:
-    """Ritorna il numero di token di una stringa di testo."""
-    encoding = tiktoken.get_encoding(encoding_name)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
-
-
-
-vectorstore = Chroma.from_documents(documents=splits,
-                                    embedding=OpenAIEmbeddings())
-
-retriever = vectorstore.as_retriever()
 
 
 
