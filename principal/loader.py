@@ -75,6 +75,3 @@ class DocumentLoader:
         chunks = self.chunk_documents(docs)
         self.save_chunks_to_files(chunks)
         return chunks
-
-loader = DocumentLoader(docs_dir="docs/")
-chunks = loader.load_and_chunk()

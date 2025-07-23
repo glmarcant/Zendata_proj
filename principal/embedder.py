@@ -2,13 +2,16 @@ import os
 from dotenv import load_dotenv
 from typing import List, Dict, Any
 from langchain_openai import AzureOpenAIEmbeddings  # Si può sostituire con JinaEmbeddings successivamente
-from langchain.vectorstores import Milvus
+from langchain_community.vectorstores import Milvus
+import time
 # from langchain.vectorstores import Quadrant  # Per estensione futura
 
 load_dotenv()
 
 api_key = os.getenv("AZURE_OPENAI_API_KEY")
 endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+api_version = os.getenv("AZURE_OPENAI_API_VERSION")
 
 class Embedder:
     """
@@ -27,6 +30,8 @@ class Embedder:
             self.embedder = AzureOpenAIEmbeddings(
                 api_key=api_key,
                 azure_endpoint=endpoint,
+                deployment=deployment,
+                api_version=api_version,
                 **kwargs
             )
         # elif embedder_type == "jina":
@@ -38,23 +43,40 @@ class Embedder:
         self.db_type = db_type
         self.db = None  # Sarà inizializzato in save_embeddings
 
-    def embed_chunks(self, chunks: List[Any]) -> List[Dict]:
+    def embed_chunks(self, chunks: List[Any], batch_size: int = 10, max_retries: int = 5, delay: int = 10) -> List[Dict]:
         """
-        Converte i chunk in vettori, mantenendo il nome del file di origine.
+        Converte i chunk in vettori, gestendo i limiti di rate tramite batching e retry.
         Args:
             chunks (List[Any]): Lista di chunk (Document).
+            batch_size (int): Numero di chunk per batch.
+            max_retries (int): Numero massimo di tentativi per batch.
+            delay (int): Secondi di attesa tra i retry.
         Returns:
             List[Dict]: Lista di dict con 'vector', 'source', 'content'.
         """
-        embeddings = self.embedder.embed_documents([chunk.page_content for chunk in chunks])
         results = []
-        for chunk, vector in zip(chunks, embeddings):
-            source = chunk.metadata.get("source", "unknown")
-            results.append({
-                "vector": vector,
-                "source": source,
-                "content": chunk.page_content
-            })
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i+batch_size]
+            texts = [chunk.page_content for chunk in batch]
+            retries = 0
+            while retries < max_retries:
+                try:
+                    print(f"Embedding batch {i} to {i+len(batch)-1}...")
+                    embeddings = self.embedder.embed_documents(texts)
+                    for chunk, vector in zip(batch, embeddings):
+                        source = chunk.metadata.get("source", "unknown")
+                        results.append({
+                            "vector": vector,
+                            "source": source,
+                            "content": chunk.page_content
+                        })
+                    break  # batch processed successfully
+                except Exception as e:
+                    print(f"[Batch {i//batch_size+1}] Errore embedding: {e}. Retry tra {delay} secondi...")
+                    retries += 1
+                    time.sleep(delay)
+            else:
+                print(f"[Batch {i//batch_size+1}] Fallito dopo {max_retries} tentativi. Skipping batch.")
         return results
 
     def save_embeddings(self, embedded_chunks: List[Dict], collection_name: str = "rag_chunks"):
@@ -65,10 +87,16 @@ class Embedder:
             collection_name (str): Nome della collezione nel database.
         """
         if self.db_type == "milvus":
-            self.db = Milvus.from_embeddings(
-                embeddings=[item["vector"] for item in embedded_chunks],
-                metadatas=[{"source": item["source"]} for item in embedded_chunks],
-                texts=[item["content"] for item in embedded_chunks],
+            # Prepara i dati per Milvus
+            texts = [item["content"] for item in embedded_chunks]
+            metadatas = [{"source": item["source"]} for item in embedded_chunks]
+            # Crea documenti Langchain
+            from langchain.schema import Document
+            documents = [Document(page_content=text, metadata=meta) for text, meta in zip(texts, metadatas)]
+            # Salva su Milvus
+            self.db = Milvus.from_documents(
+                documents=documents,
+                embedding=self.embedder,
                 collection_name=collection_name
             )
         elif self.db_type == "quadrant":
@@ -76,6 +104,8 @@ class Embedder:
             pass
         else:
             raise ValueError("Database vettoriale non supportato.")
+        
+    
 
     def process(self, chunks: List[Any], collection_name: str = "rag_chunks"):
         """
